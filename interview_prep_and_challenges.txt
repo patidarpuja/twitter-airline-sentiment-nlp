@@ -1,0 +1,843 @@
+===============================================================
+  TWITTER AIRLINE SENTIMENT ANALYSIS
+  Interview Prep, Model Justification & Deployment Challenges
+===============================================================
+  Project: End-to-End NLP Pipeline
+  Author : Puja Patidar
+  Role   : Data Science
+===============================================================
+
+
+================================================================
+PART 1 — WHY WE USED EACH MODEL (Justification)
+================================================================
+
+When an interviewer asks "Why did you use X model?" — never say
+"because it gave the best accuracy." Always explain the reasoning.
+
+----------------------------------------------------------------
+MODEL 1 & 2: Naive Bayes (Multinomial + Complement)
+----------------------------------------------------------------
+Why we used it:
+  - Naive Bayes is always the FIRST model in text classification.
+    It is fast, simple, and surprisingly strong for NLP.
+  - It uses Bayes theorem: P(sentiment|words) = P(words|sentiment) x P(sentiment)
+  - Requires almost zero tuning — great for establishing a baseline.
+  - Complement NB was added because it handles imbalanced classes better
+    by learning what a class is NOT (complement), which helps the minority
+    positive class get learned properly.
+
+Why it works for text:
+  - Text data is naturally sparse (most words appear in few documents).
+    Naive Bayes handles sparsity well.
+  - Even though the "word independence" assumption is wrong in reality,
+    it still works because word frequencies carry strong signal.
+
+Limitation:
+  - Ignores word order: "not good" and "good not" look the same.
+  - Cannot capture negation or sarcasm.
+
+Interview answer:
+  "I started with Naive Bayes as a baseline because it is the
+   standard first step in text classification. I used Complement NB
+   alongside Multinomial NB because our dataset is imbalanced — 63%
+   negative — and Complement NB is specifically designed to improve
+   recall on minority classes in imbalanced settings."
+
+----------------------------------------------------------------
+MODEL 3: Logistic Regression (DEPLOYED MODEL)
+----------------------------------------------------------------
+Why we used it:
+  - LR is the most reliable classical model for high-dimensional
+    sparse text features like TF-IDF.
+  - Each word in the vocabulary gets a coefficient per class.
+    These coefficients are directly interpretable:
+    high positive coeff = strong predictor for that class.
+  - It outputs probabilities (not just labels), which allows us to
+    show confidence scores to users in the app.
+  - Trains in seconds, predicts in microseconds.
+  - class_weight='balanced' handles our 63%/21%/16% imbalance.
+
+Why it was chosen for deployment over higher F1 models:
+  - Macro F1 = 0.70 — only 0.02 below ensemble (0.72)
+  - File size: 298 KB vs ensemble 17,000 KB (57x smaller)
+  - Inference: <5ms vs ensemble 4x slower (runs 4 models)
+  - No GPU needed — runs free on Streamlit Community Cloud
+  - Interpretable — can explain every prediction
+
+Interview answer:
+  "Logistic Regression was the best deployment choice because the
+   accuracy gap between LR and the next best model was only 0.02 F1,
+   while LR is 57x smaller, runs in under 5ms, and needs no GPU.
+   In production, the right model is not always the highest-scoring
+   model — it is the one that meets your accuracy, latency, and cost
+   constraints together."
+
+----------------------------------------------------------------
+MODEL 4: LinearSVC (Support Vector Machine)
+----------------------------------------------------------------
+Why we used it:
+  - SVM is the classic alternative to LR for text classification.
+  - It finds the hyperplane that maximises the margin between classes
+    in the high-dimensional TF-IDF feature space.
+  - Handles sparse, high-dimensional features extremely well.
+  - Often gives similar or slightly better results than LR.
+
+Why we wrapped it with CalibratedClassifierCV:
+  - LinearSVC does not output probabilities directly.
+  - CalibratedClassifierCV adds probability calibration using Platt
+    scaling so we can show confidence % to users.
+
+Limitation:
+  - Slower to train than LR on large datasets.
+  - Does not natively support probability output.
+
+----------------------------------------------------------------
+MODEL 5: Random Forest
+----------------------------------------------------------------
+Why we used it:
+  - Included for completeness and comparison — Random Forest is
+    one of the most popular ensemble methods in data science.
+  - Trains 200 decision trees on random subsets of features and data,
+    then takes a majority vote.
+  - Good for tabular data and dense feature spaces.
+
+Why it underperformed (0.63 F1):
+  - TF-IDF creates very high-dimensional SPARSE features (99.9% zeros).
+  - Random Forest randomly samples features at each split. With sparse
+    TF-IDF, most sampled features are zero — the tree learns nothing.
+  - RF is better with DENSE, lower-dimensional features like Word2Vec averages.
+  - This is an important insight: the right algorithm depends on the
+    feature representation, not just the task.
+
+Interview answer:
+  "Random Forest underperformed because TF-IDF produces very sparse
+   features — 99.9% of values are zero. Tree-based models sample
+   features randomly at each split, but most sampled features are zero
+   so the tree cannot learn useful splits. This is why linear models
+   like LR and SVM outperform tree models on raw TF-IDF."
+
+----------------------------------------------------------------
+MODEL 6 & 7: XGBoost and LightGBM
+----------------------------------------------------------------
+Why we used them:
+  - XGBoost and LightGBM are gradient boosting algorithms — they build
+    trees sequentially where each tree corrects the previous tree's errors.
+  - They are the most popular algorithms in Kaggle competitions on
+    structured data.
+  - LightGBM is 10-20x faster than XGBoost using histogram-based learning.
+  - Both handle class imbalance (XGBoost via sample_weight, LGB via class_weight).
+
+Why they didn't beat LR on this data:
+  - Same reason as Random Forest — TF-IDF sparsity.
+  - Gradient boosting is most powerful on dense tabular data.
+  - On sparse text features, linear models (LR, SVM) are generally better.
+
+When would XGBoost/LGB beat LR on text?
+  - When you use DENSE features: Word2Vec embeddings, BERT embeddings,
+    or hand-crafted features like word count, negation count, capital ratio.
+
+----------------------------------------------------------------
+MODEL 8: Soft Voting Ensemble
+----------------------------------------------------------------
+Why we used it:
+  - Each model has different strengths and different failure modes.
+  - LR fails on sarcasm, SVM fails on very short tweets,
+    Naive Bayes fails when word order matters.
+  - By averaging the PROBABILITIES from LR + SVM + Complement NB + LGB,
+    we reduce the impact of any single model's weakness.
+  - Soft voting (average probabilities) is always better than hard
+    voting (majority vote) because it accounts for confidence.
+
+Result: Macro F1 = 0.72 — best among locally trained models.
+
+Why not deployed:
+  - 17MB vs 298KB for LR — 57x larger.
+  - F1 improvement is only 0.02 — not worth the cost.
+
+Interview answer:
+  "The ensemble combines LR, SVM, Complement NB, and LightGBM using
+   soft voting — averaging probabilities instead of votes. This reduces
+   variance because each model makes different types of errors. The ensemble
+   achieved our best local Macro F1 of 0.72, though we deployed LR for
+   production due to its 57x smaller size with only 0.02 F1 difference."
+
+----------------------------------------------------------------
+MODEL 9: BiLSTM (GPU Benchmark)
+----------------------------------------------------------------
+Why we designed it:
+  - TF-IDF treats text as a bag of words — "not good" and "good not"
+    look identical. BiLSTM reads the sequence in BOTH directions,
+    capturing word order and context.
+  - Bidirectional = reads tweet left-to-right AND right-to-left.
+    This captures context from future words when processing each word.
+  - With 15 epochs and EarlyStopping, it avoids overfitting.
+  - Macro F1 benchmark: 0.80 — 14% improvement over LR.
+
+Why not deployed:
+  - Requires GPU for reasonable training (8-9 hours on CPU).
+  - Inference is much slower than LR.
+  - 130MB+ model size vs 298KB for LR.
+
+----------------------------------------------------------------
+MODEL 10: DistilBERT (GPU Benchmark)
+----------------------------------------------------------------
+Why we designed it:
+  - BERT uses self-attention — every word attends to every other word
+    simultaneously. It understands "not good" vs "good" perfectly.
+  - DistilBERT is 40% smaller and 60% faster than BERT while retaining
+    97% of BERT's performance — the best choice when GPU is limited.
+  - Pre-trained on Wikipedia + BooksCorpus — it already understands
+    English before we even touch airline tweets.
+  - Fine-tuning = training only the classification head on our data.
+    The language knowledge transfers from Wikipedia to our domain.
+  - Macro F1 benchmark: 0.85 — 21% improvement over LR.
+
+Why not deployed:
+  - 250MB+ model size — would crash Streamlit's free tier (1GB RAM limit).
+  - Requires GPU for training (8-9 hours on CPU for 4 epochs).
+  - Inference: 200-500ms per tweet vs <5ms for LR.
+  - Monthly GPU server cost: $100-500.
+
+
+================================================================
+PART 2 — CHALLENGES DURING MODEL BUILDING
+================================================================
+
+----------------------------------------------------------------
+CHALLENGE 1: Class Imbalance (Most Critical)
+----------------------------------------------------------------
+Problem:
+  - Dataset: 63% Negative, 21% Neutral, 16% Positive
+  - If you train without handling this, the model learns "always predict
+    negative" and ignores neutral and positive entirely.
+  - Accuracy of such a model = 63% (same as always predicting negative).
+    This looks good but the model learns nothing useful.
+
+How we solved it:
+  - Used class_weight='balanced' on all sklearn models.
+    This automatically sets: weight = n_samples / (n_classes x n_class_count)
+    Minority classes (positive) get 2.3x more weight during training.
+  - Used sample_weight for XGBoost (which doesn't support class_weight directly).
+  - Used Macro F1 as metric (not accuracy, not weighted F1).
+    Macro F1 = average F1 across all 3 classes equally — it penalises
+    the model equally for failing on any class regardless of size.
+
+Interview question: "What is the difference between Macro F1 and Weighted F1?"
+  - Macro F1: simple average across classes — treats each class equally.
+    Use this when all classes matter equally (our case).
+  - Weighted F1: weighted by class size — large class dominates.
+    Use this when larger classes genuinely matter more.
+  - Accuracy: totally misleading for imbalanced data.
+
+----------------------------------------------------------------
+CHALLENGE 2: Data Leakage
+----------------------------------------------------------------
+Problem:
+  - If you fit the TF-IDF vectorizer on ALL data (train + test),
+    the model sees test vocabulary during training.
+  - This inflates test scores — the model "knows" what words appear
+    in test data. Real production data won't have this advantage.
+
+How we solved it:
+  - Fit TF-IDF ONLY on training data: tfidf.fit_transform(X_train)
+  - Transform test data using the already-fitted vectorizer: tfidf.transform(X_test)
+  - The test set's vocabulary is completely unseen during fitting.
+
+Why this matters:
+  - Data leakage is the #1 cause of models that perform great in
+    notebooks but fail in production. Always fit on train only.
+
+----------------------------------------------------------------
+CHALLENGE 3: Choosing the Right Evaluation Metric
+----------------------------------------------------------------
+Problem:
+  - With 63% negative class, a model that always predicts "negative"
+    achieves 63% accuracy. That looks reasonable on paper.
+  - Accuracy completely hides the fact that the model never learns
+    neutral or positive.
+
+How we solved it:
+  - Primary metric: Macro F1 (treats all 3 classes equally)
+  - Also tracked: per-class precision, recall, F1 in classification report
+  - Set a threshold: Macro F1 must exceed 0.70 to be acceptable
+
+----------------------------------------------------------------
+CHALLENGE 4: Neutral Class Is Very Hard to Classify
+----------------------------------------------------------------
+Problem:
+  - Neutral tweets have weak or ambiguous linguistic signal.
+  - "My bag didn't arrive" — is this negative (complaint) or neutral (fact)?
+  - "Flight was okay" — sounds positive but is neutral.
+  - The model often confuses Neutral with Negative (264 cases in error analysis).
+
+Result:
+  - Negative class F1 = 0.84 (easy — strong signal words: cancelled, delay, terrible)
+  - Neutral class F1 = 0.58 (hard — ambiguous language)
+  - Positive class F1 = 0.68 (medium — positive words: great, love, amazing)
+
+How to improve this in future:
+  - Collect more neutral examples.
+  - Use a 2-stage model: first classify positive vs non-positive,
+    then classify negative vs neutral.
+  - Use DistilBERT — it understands context and can handle ambiguity better.
+
+----------------------------------------------------------------
+CHALLENGE 5: High Dimensionality of TF-IDF Features
+----------------------------------------------------------------
+Problem:
+  - TF-IDF creates 12,670 features (word and bigram combinations).
+  - Most values are zero (99.9% sparsity) — this is called a sparse matrix.
+  - Tree-based models (Random Forest, XGBoost) struggle with sparse features
+    because they randomly sample features and mostly get zeros.
+
+How we solved it:
+  - Used linear models (LR, SVM) which are designed for sparse features.
+  - Could also use dimensionality reduction (SVD/LSA) to create dense features
+    for tree models — but the linear models already performed well.
+
+----------------------------------------------------------------
+CHALLENGE 6: Hyperparameter Tuning Without Overfitting
+----------------------------------------------------------------
+Problem:
+  - Tuning on test set = data leakage. You'll overfit to test data.
+  - Need to tune on validation data, not test data.
+
+How we solved it:
+  - Used cross-validation (GridSearchCV with 5-fold CV) for tuning.
+  - Tried multiple values of regularisation strength C for LR.
+  - Best C found on cross-validation was used on held-out test set ONCE.
+  - The test set was only touched at the very end for final evaluation.
+
+----------------------------------------------------------------
+CHALLENGE 7: Text Preprocessing Choices
+----------------------------------------------------------------
+Problem:
+  - How much to clean? Remove stopwords? Lemmatize? Use bigrams?
+  - Over-cleaning removes useful signal (e.g. "not" is a stopword but
+    "not good" is very different from "good").
+  - Under-cleaning creates noise and inflates vocabulary.
+
+How we solved it:
+  - Kept NLTK stopword removal but kept "not", "no", "never" variants.
+  - Used lemmatization (not stemming) — "flying" → "fly" (preserves meaning)
+  - Used bigrams in TF-IDF (captures "not good", "on time", "wait hours")
+  - For DistilBERT: used cleaned_text (not processed_text) because BERT
+    was pre-trained on real sentences and handles raw text better.
+
+
+================================================================
+PART 3 — CHALLENGES DURING MODEL DEPLOYMENT
+================================================================
+
+----------------------------------------------------------------
+CHALLENGE 1: Model Drift / Data Drift
+----------------------------------------------------------------
+Problem:
+  - The model was trained on 2015 airline tweets.
+  - Language changes: new slang, new airline names, new complaint types.
+  - The model silently degrades over time without anyone noticing.
+
+Example:
+  - "DM us" (direct message) is common today but rare in 2015 training data.
+  - TF-IDF has no embedding for new words — they become zero features.
+
+Solution:
+  - Monitor vocabulary coverage: % of new tweets whose words exist
+    in the training vocabulary. Alert if it drops below 70%.
+  - Monthly Macro F1 checks on human-labelled samples.
+  - Retrain when F1 drops below 0.70 or vocabulary coverage drops below 70%.
+
+----------------------------------------------------------------
+CHALLENGE 2: Train-Serve Skew
+----------------------------------------------------------------
+Problem:
+  - The preprocessing pipeline in the notebook uses NLTK tokenization
+    and lemmatization. The app.py uses a simpler regex-based pipeline.
+  - If these two pipelines are even slightly different, the features
+    the model sees in production are different from training.
+  - This causes predictions to silently degrade.
+
+Example of skew:
+  - Training: "flying" → lemmatize → "fly"
+  - Production (forgot lemmatization): "flying" stays "flying"
+  - TF-IDF has "fly" as a feature but not "flying" → information is lost.
+
+Solution:
+  - Always export the EXACT preprocessing function used during training.
+  - Test the deployed app with the same examples used during development
+    and verify predictions match.
+
+----------------------------------------------------------------
+CHALLENGE 3: Package Version Conflicts
+----------------------------------------------------------------
+Problem:
+  - A model trained with scikit-learn 1.2 may not load correctly
+    with scikit-learn 1.5 — the .pkl format changes between versions.
+  - Streamlit Cloud installs the latest version if you don't pin versions.
+
+Solution:
+  - Pin exact package versions in requirements.txt:
+    scikit-learn==1.4.0
+    numpy==1.26.0
+  - We kept versions unpinned for simplicity but in a real production
+    system you always pin versions.
+
+----------------------------------------------------------------
+CHALLENGE 4: Memory and File Size Limits
+----------------------------------------------------------------
+Problem:
+  - Streamlit Community Cloud has ~1GB RAM limit.
+  - Our ensemble_model.pkl is 17MB — fine for Streamlit.
+  - DistilBERT would be 250MB+ — would exceed limits and crash the app.
+  - If we tried to load DistilBERT on the free tier, the app would crash
+    with an OutOfMemory error.
+
+Solution:
+  - Deployed Logistic Regression (298 KB) — well within limits.
+  - DistilBERT would require a paid GPU server (AWS SageMaker, GCP Vertex AI).
+
+----------------------------------------------------------------
+CHALLENGE 5: Cold Start / Model Loading Time
+----------------------------------------------------------------
+Problem:
+  - Every time a new user opens the app, Streamlit loads the model from disk.
+  - If the model is large (like an ensemble or DistilBERT), the first load
+    takes several seconds — bad user experience.
+
+Solution:
+  - Used @st.cache_resource decorator — loads the model ONCE and keeps it
+    in memory for all subsequent users.
+  - LR model loads in <1 second; ensemble loads in ~3 seconds.
+
+----------------------------------------------------------------
+CHALLENGE 6: Handling Edge Cases in Production
+----------------------------------------------------------------
+Problem:
+  - Users might input:
+    - Empty string: ""
+    - Only mentions: "@united @delta"
+    - Only emojis: "✈️😡"
+    - Non-English text: "vol annulé terrible"
+    - Very long text: a full paragraph, not a tweet
+
+  - After preprocessing, all of these become empty strings.
+  - The model gets an all-zero feature vector and makes a random prediction.
+
+Solution in app.py:
+  - Checked for empty input before calling predict_sentiment().
+  - Showed warning: "Please enter some text."
+  - Showed what the model saw after preprocessing in an expander.
+  - Future improvement: add input length validation and language detection.
+
+----------------------------------------------------------------
+CHALLENGE 7: Monitoring After Deployment
+----------------------------------------------------------------
+Problem:
+  - Once deployed, most people forget about the model.
+  - But the model degrades silently over time as language and data change.
+  - Without monitoring, you discover the model is broken only when a user
+    complains — which is too late.
+
+What to monitor (our 6-metric framework):
+  1. Prediction distribution — daily
+  2. Mean confidence score — daily
+  3. Vocabulary coverage — weekly
+  4. Macro F1 (human-evaluated samples) — monthly
+  5. Empty input % — daily
+  6. Response latency (p95) — real-time
+
+When to retrain:
+  - Macro F1 drops below 0.70
+  - Mean confidence drops more than 10 percentage points
+  - Vocabulary coverage drops below 70%
+
+
+================================================================
+PART 4 — INTERVIEW QUESTIONS & ANSWERS
+================================================================
+
+CATEGORY A: PROJECT-SPECIFIC QUESTIONS
+---------------------------------------
+
+Q1. "Walk me through your NLP project end to end."
+
+Answer framework:
+  1. Problem: classify airline tweets as negative/neutral/positive
+  2. Data: 14,640 tweets, severely imbalanced (63% negative)
+  3. Challenge #1: imbalance → used class_weight='balanced' + Macro F1
+  4. Feature engineering: TF-IDF with bigrams (15k features, 12,670 unique)
+  5. Models: trained 8 models locally, 2 GPU benchmarks
+  6. Best local model: Voting Ensemble (F1=0.72), Deployed: LR (F1=0.70)
+  7. Deployment: Streamlit Community Cloud — live public URL
+  8. Monitoring: 6-metric framework for drift detection
+
+-------
+
+Q2. "Why did you choose Logistic Regression over the Ensemble
+     which had higher F1?"
+
+Answer:
+  "The ensemble had Macro F1 of 0.72 vs LR's 0.70 — only 0.02 difference.
+   But the ensemble is 57x larger (17MB vs 298KB) and runs 4 models per
+   prediction. The marginal accuracy gain did not justify the cost in memory,
+   inference time, and deployment complexity. LR runs in under 5ms with no
+   GPU on a free server. That is the right engineering trade-off for this use case."
+
+-------
+
+Q3. "What is the most important lesson from this project?"
+
+Answer:
+  "Never use accuracy as your metric on imbalanced data. Our dataset is
+   63% negative. A model that always predicts 'negative' achieves 63%
+   accuracy but is completely useless. Macro F1 forces the model to perform
+   well on all classes equally — that revealed that the neutral class
+   (F1=0.58) needs the most improvement."
+
+-------
+
+Q4. "How would you improve this model?"
+
+Answer (5 levels):
+  1. Collect more neutral training examples — neutral is the hardest class
+  2. Use Word2Vec or FastText dense embeddings instead of TF-IDF for
+     tree-based models — would improve XGBoost/LGB significantly
+  3. Run DistilBERT fine-tuning on a GPU — expected 15% F1 improvement
+  4. Add negation handling: "not good" should be treated as one feature
+  5. Use a two-stage classifier: positive vs non-positive first,
+     then negative vs neutral — cleaner decision boundaries
+
+-------
+
+Q5. "What is data leakage and did you avoid it?"
+
+Answer:
+  "Data leakage occurs when information from the test set is used during
+   training, artificially inflating model performance. The most common
+   form in NLP is fitting the TF-IDF vectorizer on all data — the model
+   then knows test vocabulary during training.
+   I avoided this by fitting the vectorizer ONLY on training data using
+   fit_transform(), and calling transform() only on the test set.
+   In scikit-learn Pipelines this is handled automatically."
+
+-------
+
+Q6. "Explain TF-IDF. Why did you use it?"
+
+Answer:
+  "TF-IDF stands for Term Frequency - Inverse Document Frequency.
+   - TF: how often a word appears in THIS tweet (raw count)
+   - IDF: penalises words that appear in MANY tweets (common words
+     like 'the', 'is' get low weight; rare words get high weight)
+   - Result: each tweet is represented as a vector of weighted word importance
+
+   I used TF-IDF because it works extremely well with linear models like
+   LR and SVM on short text. It is interpretable — the TF-IDF weight directly
+   shows which words are important for each tweet. It also handles sparse
+   text naturally. I used sublinear_tf=True (log(1+tf)) to dampen the effect
+   of words that appear many times in one tweet."
+
+-------
+
+Q7. "What is the difference between precision, recall, and F1?"
+
+Answer:
+  "Using our negative class as an example:
+   - Precision = of all tweets predicted negative, how many were actually negative?
+     High precision = few false alarms.
+   - Recall = of all actually negative tweets, how many did we correctly catch?
+     High recall = few missed negatives.
+   - F1 = harmonic mean of precision and recall = 2*(P*R)/(P+R)
+     High F1 = balanced precision and recall.
+
+   In sentiment analysis, both precision and recall matter.
+   Missing a negative tweet (low recall) means an airline complaint goes
+   unnoticed. Wrongly flagging a positive tweet (low precision) wastes
+   customer service resources. F1 balances both."
+
+-------
+
+Q8. "What is the difference between Macro F1 and Weighted F1?"
+
+Answer:
+  "Macro F1 = simple average of F1 across all classes.
+   It treats all classes equally regardless of size.
+
+   Weighted F1 = average weighted by class size.
+   The majority class dominates the score.
+
+   For our imbalanced dataset (63% negative), weighted F1 is misleading
+   because it would reward a model that is great at negative but terrible
+   at positive. Macro F1 is the right choice because all 3 sentiment classes
+   matter equally to the airline."
+
+-------
+
+CATEGORY B: GENERAL ML INTERVIEW QUESTIONS
+-------------------------------------------
+
+Q9. "What is overfitting and how do you prevent it?"
+
+Answer:
+  "Overfitting occurs when a model learns the training data too well —
+   including the noise — and fails to generalise to new data.
+   Signs: training accuracy much higher than test accuracy.
+
+   Prevention techniques:
+   1. Regularisation: LR uses L2 (C parameter), LightGBM uses L1/L2
+   2. Cross-validation: evaluate on multiple splits, not just one
+   3. Early stopping: stop training when validation loss starts increasing
+      (used in BiLSTM with patience=3)
+   4. More data: overfitting is less likely with more training examples
+   5. Simpler model: if a simple LR gives similar results to complex RF,
+      prefer LR"
+
+-------
+
+Q10. "What is cross-validation and why is it important?"
+
+Answer:
+  "Cross-validation (CV) evaluates a model by splitting training data into
+   k folds. The model trains on k-1 folds and validates on the remaining fold.
+   This repeats k times, rotating which fold is the validation set.
+   The final score is the average across all k folds.
+
+   Why it matters:
+   - A single train/test split can be lucky or unlucky depending on which
+     samples end up in each set.
+   - CV gives a more stable estimate of true model performance.
+   - It also helps with hyperparameter tuning — we used 5-fold CV in
+     GridSearchCV to tune the C parameter of Logistic Regression."
+
+-------
+
+Q11. "What is regularisation and why does LR need it?"
+
+Answer:
+  "Regularisation adds a penalty term to the loss function that discourages
+   large weights. Without it, LR would give very large coefficients to
+   rare words that happen to perfectly predict the training labels —
+   but these large coefficients don't generalise.
+
+   In LR, C controls regularisation:
+   - Small C (e.g. 0.01): strong regularisation, small weights, may underfit
+   - Large C (e.g. 10): weak regularisation, large weights, may overfit
+   - Default C=1.0: balanced starting point
+
+   We tried C = [0.1, 0.5, 1.0, 5.0] using cross-validation to find the
+   best value for our data."
+
+-------
+
+Q12. "Explain gradient boosting in simple terms."
+
+Answer:
+  "Gradient boosting builds an ensemble of weak learners (small decision trees)
+   sequentially. Each new tree focuses on the ERRORS made by all previous trees.
+
+   Simple analogy:
+   - Tree 1 predicts, makes some errors
+   - Tree 2 focuses specifically on what Tree 1 got wrong
+   - Tree 3 focuses on what Tree 1 and 2 got wrong together
+   - Final prediction = weighted sum of all tree predictions
+
+   XGBoost and LightGBM are both gradient boosting but differ in how they
+   build trees:
+   - XGBoost: level-wise (slower, more thorough)
+   - LightGBM: leaf-wise (faster, can overfit on small data)"
+
+-------
+
+Q13. "What is Word2Vec and how is it different from TF-IDF?"
+
+Answer:
+  "TF-IDF represents each word as an index (one-hot style) — words have
+   no relationship to each other. 'good' and 'great' are treated as
+   completely different, unrelated words.
+
+   Word2Vec represents each word as a dense vector (e.g. 100 dimensions)
+   where similar words have similar vectors:
+   - 'good' and 'great' have vectors close together
+   - 'flight' and 'plane' are close together
+   - The famous example: king - man + woman ≈ queen
+
+   TF-IDF advantage: interpretable, no training needed, works with LR/SVM
+   Word2Vec advantage: captures semantic similarity, works better with tree models
+
+   BERT advantage over both: captures CONTEXT. 'bank' in 'river bank' vs
+   'bank account' gets DIFFERENT vectors. TF-IDF and Word2Vec give 'bank'
+   the same vector regardless of context."
+
+-------
+
+Q14. "What is transfer learning? How did you use it?"
+
+Answer:
+  "Transfer learning = taking a model pre-trained on a large general dataset
+   and fine-tuning it on your specific smaller dataset.
+
+   DistilBERT was pre-trained on Wikipedia + BooksCorpus (billions of words).
+   It already understands English grammar, context, negation, entities.
+
+   We added a classification head (one Dense layer) on top and trained
+   ONLY that head on our 10,896 airline tweets.
+   The model transfers its English knowledge to our specific task.
+
+   Result: 0.85 Macro F1 with only 4 training epochs on our data.
+   Without transfer learning, training from scratch would need millions
+   of labelled tweets to reach the same performance."
+
+-------
+
+Q15. "What happens after you deploy a model? How do you know it's working?"
+
+Answer:
+  "Deployment is not the finish line — it is the starting line for monitoring.
+
+   I built a 6-metric monitoring framework:
+   1. Prediction distribution: track daily % of neg/neu/pos predictions.
+      A sudden shift (e.g. 90% negative) signals data drift or a bug.
+   2. Confidence score: if mean confidence drops from 82% to 65%,
+      the model is seeing unfamiliar inputs — early drift warning.
+   3. Vocabulary coverage: % of new tweet words that exist in training vocab.
+      Drop below 70% means the language has changed.
+   4. Macro F1: monthly human evaluation on 100-200 samples.
+      Retrain when it drops below 0.70.
+   5. Empty input %: if preprocessing produces too many empty strings,
+      the pipeline may be broken.
+   6. Latency: p95 response time. Alert if it exceeds 500ms.
+
+   The most important lesson: always monitor confidence score.
+   It drops before accuracy does — it is your earliest warning signal."
+
+-------
+
+Q16. "What is the bias-variance tradeoff?"
+
+Answer:
+  "Bias = error from wrong assumptions about data (underfitting).
+   High bias model: too simple, misses patterns. E.g. always predict 'negative'.
+
+   Variance = error from sensitivity to small training data fluctuations (overfitting).
+   High variance model: memorises training data, fails on new data.
+
+   The tradeoff: making a model more complex reduces bias but increases variance.
+
+   In our project:
+   - Naive Bayes: high bias (ignores word order), low variance (stable)
+   - Deep neural network: low bias (captures complex patterns), high variance
+     (needs lots of data + regularisation to not overfit)
+   - LR with regularisation: balanced bias-variance — our best deployable model"
+
+-------
+
+Q17. "Why use a Pipeline in scikit-learn?"
+
+Answer:
+  "A Pipeline chains preprocessing and model steps into one object.
+
+   Without Pipeline (DANGEROUS):
+     tfidf.fit(X_train)
+     X_train_transformed = tfidf.transform(X_train)
+     X_test_transformed = tfidf.transform(X_test)  # easy to forget this!
+     model.fit(X_train_transformed)
+
+   With Pipeline (SAFE):
+     pipe = Pipeline([('tfidf', TfidfVectorizer()), ('lr', LogisticRegression())])
+     pipe.fit(X_train, y_train)
+     pipe.predict(X_test)  # automatically transforms X_test with tfidf first
+
+   Pipeline prevents data leakage automatically in cross-validation —
+   it re-fits the preprocessor on each training fold separately.
+   It also makes deployment cleaner: save one object, load one object."
+
+-------
+
+Q18. "How do you handle a new word in production that was not in training data?"
+
+Answer:
+  "This is the Out-Of-Vocabulary (OOV) problem.
+
+   TF-IDF approach (our model):
+   - Unknown words simply have no feature column — they become zero.
+   - The model still makes predictions based on known words in the tweet.
+   - If ALL words are unknown, the feature vector is all-zero and the model
+     predicts the majority class (negative in our case).
+   - This is a weakness of TF-IDF — it cannot handle new words at all.
+
+   Better approaches:
+   - Word2Vec/FastText: use character n-grams to handle new words
+   - BERT/DistilBERT: subword tokenization (WordPiece) — splits 'unflyable'
+     into 'un', '##fly', '##able' — each piece exists in vocabulary."
+
+-------
+
+Q19. "What is attention mechanism in transformers?"
+
+Answer:
+  "Attention allows every word in a sentence to 'look at' every other word
+   when computing its representation.
+
+   Before attention (LSTM):
+   'I do not love this airline'
+   By the time LSTM reaches 'airline', it may have forgotten 'not'.
+
+   With self-attention (BERT):
+   When computing 'love', the model directly attends to ALL other words.
+   It learns that 'not' strongly modifies 'love' → changes the representation.
+
+   This is why DistilBERT gets 0.85 F1 vs LSTM's 0.80 — it handles
+   negation and long-range dependencies much better."
+
+-------
+
+Q20. "If you had to redo this project, what would you do differently?"
+
+Answer:
+  "Three main improvements:
+
+   1. Feature engineering: I would add hand-crafted features alongside TF-IDF —
+      negation count, exclamation marks, ALL CAPS ratio, emoji sentiment score.
+      These are cheap to compute and can boost tree-based models significantly.
+
+   2. Data collection: The neutral class (only 21% of data, F1=0.58) is the
+      weakest link. I would use active learning to specifically collect more
+      ambiguous neutral examples that the model currently struggles with.
+
+   3. Two-stage model: Instead of one 3-class classifier, train:
+      Stage 1: Positive vs Non-positive (binary, easy)
+      Stage 2: Negative vs Neutral (binary, harder)
+      This creates cleaner decision boundaries and typically improves
+      the neutral class significantly."
+
+
+================================================================
+PART 5 — KEY NUMBERS TO REMEMBER
+================================================================
+
+Always know these by heart — interviewers will ask:
+
+  Dataset size       : 14,640 tweets total (10,896 train / 2,724 test)
+  Class split        : 63% Negative / 21% Neutral / 16% Positive
+  TF-IDF features    : 12,670 (out of 15,000 max; bigrams; sublinear_tf)
+  TF-IDF sparsity    : 99.9% (most values are zero)
+  Best local model   : Voting Ensemble — Macro F1 = 0.72
+  Deployed model     : Logistic Regression — Macro F1 = 0.70, Accuracy = 76%
+  Neutral class F1   : 0.58 (hardest class to classify)
+  Negative class F1  : 0.84 (easiest — strong signal words)
+  Positive class F1  : 0.68 (medium)
+  Most common error  : Neutral predicted as Negative (264 cases)
+  LR model size      : 298 KB
+  Ensemble size      : 17 MB (57x larger than LR)
+  Inference time     : LR < 5ms / DistilBERT 200-500ms
+  Statistical tests  : 7 (Shapiro-Wilk, Mann-Whitney, ANOVA, Chi-Square,
+                         Z-test, Levene, Kruskal-Wallis)
+  Models trained     : 8 locally on CPU
+  GPU benchmarks     : 2 (BiLSTM=0.80, DistilBERT=0.85)
+  Monitoring metrics : 6 (distribution, confidence, vocab, F1, empty%, latency)
+
+
+================================================================
+END OF DOCUMENT
+================================================================

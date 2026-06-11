@@ -242,7 +242,7 @@ with tab1:
         st.markdown("**Try these examples:**")
         examples = [
             "My flight was cancelled and nobody helped me!",
-            "The boarding process was okay, nothing special.",
+            "I am flying from New York to Chicago on United Airlines.",
             "Amazing crew, smooth flight, would fly again!",
             "Luggage lost for the third time this year.",
             "Thank you for the early boarding, much appreciated.",
@@ -258,10 +258,24 @@ with tab1:
         )
         analyse_btn = st.button("🔍 Analyse Sentiment", type="primary", use_container_width=True)
 
+    st.caption(
+        "ℹ️ Model note: Neutral tweets are the hardest to classify (F1=0.58). "
+        "Ambiguous tweets like 'okay, nothing special' may be predicted as Negative. "
+        "Low confidence (<60%) means the model is uncertain — check the confidence bar."
+    )
+
     if analyse_btn or user_input:
         if tfidf_model is not None and user_input.strip():
             label, probs = predict_sentiment(user_input, tfidf_model, lr_model)
             confidence   = probs[label] * 100
+
+            # Low confidence warning
+            if confidence < 60:
+                st.warning(
+                    f"⚠️ Low confidence ({confidence:.1f}%) — this tweet is ambiguous. "
+                    "The model is uncertain between classes. "
+                    "Neutral tweets with weak signal are the most common cause."
+                )
 
             st.markdown("---")
             col_r1, col_r2, col_r3, col_r4 = st.columns(4)

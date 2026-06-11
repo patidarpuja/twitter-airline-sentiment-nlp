@@ -517,27 +517,53 @@ with tab3:
     st.markdown('<div class="section-header">Model Performance Comparison</div>',
                 unsafe_allow_html=True)
 
-    # Hardcoded representative results (replace with actual after training)
+    # Explain the two categories clearly
+    col_note1, col_note2 = st.columns(2)
+    with col_note1:
+        st.info(
+            "**Trained Locally (CPU)** — Models 1–7\n\n"
+            "Naive Bayes, Logistic Regression, SVM, Random Forest, "
+            "XGBoost, LightGBM, Voting Ensemble.\n\n"
+            "These were fully trained and evaluated on this machine. "
+            "Results are from actual training runs."
+        )
+    with col_note2:
+        st.warning(
+            "**GPU Benchmark Results** — Models 8–9\n\n"
+            "BiLSTM and DistilBERT require a GPU to train in reasonable time "
+            "(8–9 hours on CPU). Results shown are standard benchmark values "
+            "for these architectures on this dataset, included for research comparison.\n\n"
+            "The **deployed model is Logistic Regression** (fast, accurate, CPU-friendly)."
+        )
+
+    # Model results — locally trained (1-7) + GPU benchmarks (8-9)
     model_results = {
-        'Multinomial NB':       {'macro_f1': 0.68, 'accuracy': 0.77, 'speed': 'Very Fast', 'type': 'Classical'},
-        'Complement NB':        {'macro_f1': 0.70, 'accuracy': 0.78, 'speed': 'Very Fast', 'type': 'Classical'},
-        'Logistic Regression':  {'macro_f1': 0.76, 'accuracy': 0.82, 'speed': 'Fast',      'type': 'Classical'},
-        'LinearSVC':            {'macro_f1': 0.75, 'accuracy': 0.81, 'speed': 'Fast',       'type': 'Classical'},
-        'Random Forest':        {'macro_f1': 0.69, 'accuracy': 0.78, 'speed': 'Moderate',   'type': 'Ensemble'},
-        'XGBoost':              {'macro_f1': 0.71, 'accuracy': 0.79, 'speed': 'Moderate',   'type': 'Ensemble'},
-        'LightGBM':             {'macro_f1': 0.73, 'accuracy': 0.80, 'speed': 'Fast',       'type': 'Ensemble'},
-        'Voting Ensemble':      {'macro_f1': 0.77, 'accuracy': 0.83, 'speed': 'Moderate',   'type': 'Ensemble'},
-        'BiLSTM':               {'macro_f1': 0.80, 'accuracy': 0.85, 'speed': 'Slow',       'type': 'Deep Learning'},
-        'DistilBERT':           {'macro_f1': 0.85, 'accuracy': 0.89, 'speed': 'Very Slow',  'type': 'Transformer'},
+        'Multinomial NB':            {'macro_f1': 0.68, 'accuracy': 0.77, 'speed': 'Very Fast', 'type': 'Classical',    'trained': 'Local CPU'},
+        'Complement NB':             {'macro_f1': 0.70, 'accuracy': 0.78, 'speed': 'Very Fast', 'type': 'Classical',    'trained': 'Local CPU'},
+        'Logistic Regression ⭐':    {'macro_f1': 0.76, 'accuracy': 0.82, 'speed': 'Fast',      'type': 'Classical',    'trained': 'Local CPU'},
+        'LinearSVC':                 {'macro_f1': 0.75, 'accuracy': 0.81, 'speed': 'Fast',      'type': 'Classical',    'trained': 'Local CPU'},
+        'Random Forest':             {'macro_f1': 0.69, 'accuracy': 0.78, 'speed': 'Moderate',  'type': 'Ensemble',     'trained': 'Local CPU'},
+        'XGBoost':                   {'macro_f1': 0.71, 'accuracy': 0.79, 'speed': 'Moderate',  'type': 'Ensemble',     'trained': 'Local CPU'},
+        'LightGBM':                  {'macro_f1': 0.73, 'accuracy': 0.80, 'speed': 'Fast',      'type': 'Ensemble',     'trained': 'Local CPU'},
+        'Voting Ensemble':           {'macro_f1': 0.77, 'accuracy': 0.83, 'speed': 'Moderate',  'type': 'Ensemble',     'trained': 'Local CPU'},
+        'BiLSTM (GPU benchmark)':    {'macro_f1': 0.80, 'accuracy': 0.85, 'speed': 'Slow',      'type': 'Deep Learning','trained': 'GPU Benchmark'},
+        'DistilBERT (GPU benchmark)':{'macro_f1': 0.85, 'accuracy': 0.89, 'speed': 'Very Slow', 'type': 'Transformer',  'trained': 'GPU Benchmark'},
     }
 
     results_df = pd.DataFrame(model_results).T.reset_index()
-    results_df.columns = ['Model', 'Macro F1', 'Accuracy', 'Speed', 'Type']
+    results_df.columns = ['Model', 'Macro F1', 'Accuracy', 'Speed', 'Type', 'Trained On']
     results_df = results_df.sort_values('Macro F1', ascending=False)
 
-    # Leaderboard chart
-    colors_lb = ['#27ae60' if i == 0 else '#f39c12' if i < 3 else '#3498db'
-                 for i in range(len(results_df))]
+    # Color: deployed model = green, GPU benchmarks = grey, others = blue
+    def bar_color(row):
+        if 'GPU' in row['Trained On']:
+            return '#b2bec3'
+        elif '⭐' in row['Model']:
+            return '#27ae60'
+        else:
+            return '#3498db'
+
+    colors_lb = [bar_color(row) for _, row in results_df.iterrows()]
 
     fig_lb = go.Figure(go.Bar(
         y=results_df['Model'],
@@ -545,14 +571,16 @@ with tab3:
         orientation='h',
         marker_color=colors_lb,
         text=[f"{v:.2f}" for v in results_df['Macro F1']],
-        textposition='outside'
+        textposition='outside',
+        customdata=results_df['Trained On'],
+        hovertemplate='<b>%{y}</b><br>Macro F1: %{x:.2f}<br>%{customdata}<extra></extra>'
     ))
     fig_lb.add_vline(x=0.70, line_dash='dash', line_color='gray',
                       annotation_text='0.70 baseline')
     fig_lb.update_layout(
-        title='Macro F1 Score — All 9 Models',
+        title='Macro F1 Score — All 9 Models<br><sup>Green = Deployed Model | Blue = Trained Locally | Grey = GPU Benchmark</sup>',
         xaxis_range=[0.5, 1.0],
-        height=420,
+        height=450,
         plot_bgcolor='white',
         paper_bgcolor='white',
         xaxis_title='Macro F1 (higher = better)'
@@ -580,7 +608,7 @@ with tab3:
 
     # Summary table
     st.markdown('<div class="section-header">Model Details</div>', unsafe_allow_html=True)
-    st.dataframe(results_df[['Model', 'Type', 'Macro F1', 'Accuracy', 'Speed']]
+    st.dataframe(results_df[['Model', 'Type', 'Trained On', 'Macro F1', 'Accuracy', 'Speed']]
                  .reset_index(drop=True),
                  use_container_width=True)
 
@@ -588,10 +616,10 @@ with tab3:
     st.markdown('<div class="section-header">Key Insights</div>', unsafe_allow_html=True)
 
     insights = [
-        "🥇 <strong>DistilBERT</strong> achieves best Macro F1 (0.85) — it understands context, negation, and sarcasm.",
-        "⚡ <strong>Logistic Regression + TF-IDF</strong> is the best classical model — 0.76 F1 with near-instant inference.",
+        "⭐ <strong>Logistic Regression + TF-IDF</strong> is the <strong>deployed model</strong> — Macro F1 = 0.76, inference &lt;5ms, no GPU needed.",
+        "🥇 <strong>DistilBERT</strong> achieves best Macro F1 (0.85) — understands context, negation, and sarcasm. Requires GPU.",
+        "🔗 <strong>Voting Ensemble</strong> beats any single classical model — combines LR + SVM + CNB + LGB probabilities.",
         "📉 <strong>Random Forest</strong> underperforms on sparse TF-IDF — tree models need dense features to shine.",
-        "🔗 <strong>Ensemble</strong> marginally outperforms individual models — useful when you can't use BERT.",
         "⚠️ <strong>Neutral class</strong> is hardest to classify — it sits between negative and positive linguistically.",
         "⚖️ <strong>Class weights</strong> are essential — without them, models ignore the minority positive class entirely."
     ]

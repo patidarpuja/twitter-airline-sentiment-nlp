@@ -668,10 +668,11 @@ This system automatically categorises each tweet so airlines can:
 - TF-IDF, BoW, and Word2Vec feature engineering with business insights
 
 **Notebook 3 — Modelling** (modeling_v2.ipynb)
-- 9 models: Naive Bayes → Logistic Regression → SVM → Random Forest
-  → XGBoost → LightGBM → Ensemble → BiLSTM → **DistilBERT**
-- Class imbalance handled with sample weights
+- 10 models: Multinomial NB → Complement NB → Logistic Regression → SVM
+  → Random Forest → XGBoost → LightGBM → Ensemble → BiLSTM* → DistilBERT*
+- Class imbalance handled with **class_weight='balanced'** on all models
 - Error analysis and feature importance via LR coefficients
+- *BiLSTM & DistilBERT require GPU — results shown are research benchmarks
 
 **Deployment** (app.py — this app!)
 - Real-time single and batch tweet analysis
@@ -682,8 +683,8 @@ This system automatically categorises each tweet so airlines can:
 ### 📊 Key Findings
 - Dataset is **severely imbalanced** (63% negative) → Macro F1 as primary metric
 - **United & American** airlines have highest complaint rates
-- **DistilBERT** achieves 0.85 Macro F1 — state-of-the-art context understanding
-- **Logistic Regression + TF-IDF** is the best production-ready classical model (0.76 F1, <1ms inference)
+- **DistilBERT** achieves 0.85 Macro F1 (GPU benchmark) — state-of-the-art context understanding
+- **Logistic Regression + TF-IDF** is the deployed model — Macro F1 = 0.70, Accuracy = 76%, inference &lt;5ms
 """)
 
     with col_about2:
@@ -707,14 +708,15 @@ This system automatically categorises each tweet so airlines can:
 
 ### 📈 Skills Demonstrated
 ✅ Text preprocessing pipeline
-✅ Statistical hypothesis testing
-✅ Feature engineering (BoW, TF-IDF, W2V)
-✅ Handling class imbalance
-✅ Classical ML & ensemble methods
-✅ Neural networks (BiLSTM)
-✅ Transfer learning (DistilBERT)
-✅ Model interpretability
-✅ Production deployment
+✅ Statistical hypothesis testing (7 tests)
+✅ Feature engineering (BoW, TF-IDF, Word2Vec)
+✅ Handling class imbalance (class weights + Macro F1)
+✅ Classical ML (8 models including ensemble)
+✅ Model interpretability (LR coefficients, error analysis)
+✅ Production deployment (Streamlit Cloud)
+✅ Production monitoring framework
+🔬 Neural networks (BiLSTM — GPU required)
+🔬 Transfer learning (DistilBERT — GPU required)
 
 ---
 

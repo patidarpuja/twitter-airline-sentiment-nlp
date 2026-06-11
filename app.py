@@ -198,11 +198,12 @@ with st.sidebar:
     st.markdown("### 🧠 About the Model")
     st.markdown("""
 **Algorithm**: Logistic Regression
-**Features**: TF-IDF (15K features, bigrams)
+**Features**: TF-IDF (12,670 bigrams)
 **Classes**: Negative / Neutral / Positive
-**Metric**: Macro F1
+**Macro F1**: 0.70 (actual test set)
+**Accuracy**: 76%
 
-*For best accuracy: run DistilBERT in modeling_v2.ipynb*
+*BiLSTM (0.80) & DistilBERT (0.85) require GPU*
 """)
     st.markdown("---")
     st.markdown("### 👩‍💻 Project Info")
@@ -536,16 +537,16 @@ with tab3:
             "The **deployed model is Logistic Regression** (fast, accurate, CPU-friendly)."
         )
 
-    # Model results — locally trained (1-7) + GPU benchmarks (8-9)
+    # Model results — locally trained (1-7, actual numbers) + GPU benchmarks (8-9)
     model_results = {
-        'Multinomial NB':            {'macro_f1': 0.68, 'accuracy': 0.77, 'speed': 'Very Fast', 'type': 'Classical',    'trained': 'Local CPU'},
-        'Complement NB':             {'macro_f1': 0.70, 'accuracy': 0.78, 'speed': 'Very Fast', 'type': 'Classical',    'trained': 'Local CPU'},
-        'Logistic Regression ⭐':    {'macro_f1': 0.76, 'accuracy': 0.82, 'speed': 'Fast',      'type': 'Classical',    'trained': 'Local CPU'},
-        'LinearSVC':                 {'macro_f1': 0.75, 'accuracy': 0.81, 'speed': 'Fast',      'type': 'Classical',    'trained': 'Local CPU'},
-        'Random Forest':             {'macro_f1': 0.69, 'accuracy': 0.78, 'speed': 'Moderate',  'type': 'Ensemble',     'trained': 'Local CPU'},
-        'XGBoost':                   {'macro_f1': 0.71, 'accuracy': 0.79, 'speed': 'Moderate',  'type': 'Ensemble',     'trained': 'Local CPU'},
-        'LightGBM':                  {'macro_f1': 0.73, 'accuracy': 0.80, 'speed': 'Fast',      'type': 'Ensemble',     'trained': 'Local CPU'},
-        'Voting Ensemble':           {'macro_f1': 0.77, 'accuracy': 0.83, 'speed': 'Moderate',  'type': 'Ensemble',     'trained': 'Local CPU'},
+        'Multinomial NB':            {'macro_f1': 0.65, 'accuracy': 0.74, 'speed': 'Very Fast', 'type': 'Classical',    'trained': 'Local CPU'},
+        'Complement NB':             {'macro_f1': 0.67, 'accuracy': 0.75, 'speed': 'Very Fast', 'type': 'Classical',    'trained': 'Local CPU'},
+        'LinearSVC':                 {'macro_f1': 0.69, 'accuracy': 0.78, 'speed': 'Fast',      'type': 'Classical',    'trained': 'Local CPU'},
+        'Random Forest':             {'macro_f1': 0.63, 'accuracy': 0.72, 'speed': 'Moderate',  'type': 'Ensemble',     'trained': 'Local CPU'},
+        'XGBoost':                   {'macro_f1': 0.66, 'accuracy': 0.75, 'speed': 'Moderate',  'type': 'Ensemble',     'trained': 'Local CPU'},
+        'LightGBM':                  {'macro_f1': 0.68, 'accuracy': 0.76, 'speed': 'Fast',      'type': 'Ensemble',     'trained': 'Local CPU'},
+        'Logistic Regression ⭐':    {'macro_f1': 0.70, 'accuracy': 0.76, 'speed': 'Fast',      'type': 'Classical',    'trained': 'Local CPU'},
+        'Voting Ensemble':           {'macro_f1': 0.72, 'accuracy': 0.79, 'speed': 'Moderate',  'type': 'Ensemble',     'trained': 'Local CPU'},
         'BiLSTM (GPU benchmark)':    {'macro_f1': 0.80, 'accuracy': 0.85, 'speed': 'Slow',      'type': 'Deep Learning','trained': 'GPU Benchmark'},
         'DistilBERT (GPU benchmark)':{'macro_f1': 0.85, 'accuracy': 0.89, 'speed': 'Very Slow', 'type': 'Transformer',  'trained': 'GPU Benchmark'},
     }
@@ -616,12 +617,12 @@ with tab3:
     st.markdown('<div class="section-header">Key Insights</div>', unsafe_allow_html=True)
 
     insights = [
-        "⭐ <strong>Logistic Regression + TF-IDF</strong> is the <strong>deployed model</strong> — Macro F1 = 0.76, inference &lt;5ms, no GPU needed.",
-        "🥇 <strong>DistilBERT</strong> achieves best Macro F1 (0.85) — understands context, negation, and sarcasm. Requires GPU.",
-        "🔗 <strong>Voting Ensemble</strong> beats any single classical model — combines LR + SVM + CNB + LGB probabilities.",
+        "⭐ <strong>Logistic Regression + TF-IDF</strong> is the <strong>deployed model</strong> — Macro F1 = 0.70, Accuracy = 76%, inference &lt;5ms, no GPU needed.",
+        "🥇 <strong>DistilBERT</strong> achieves best Macro F1 (0.85, GPU benchmark) — understands context, negation, and sarcasm.",
+        "🔗 <strong>Voting Ensemble</strong> (Macro F1 = 0.72) beats any single classical model — combines LR + SVM + CNB + LGB probabilities.",
         "📉 <strong>Random Forest</strong> underperforms on sparse TF-IDF — tree models need dense features to shine.",
-        "⚠️ <strong>Neutral class</strong> is hardest to classify — it sits between negative and positive linguistically.",
-        "⚖️ <strong>Class weights</strong> are essential — without them, models ignore the minority positive class entirely."
+        "⚠️ <strong>Neutral class</strong> is hardest to classify — Neutral↔Negative confusion is the most common error (264 cases).",
+        "⚖️ <strong>Class weights</strong> are essential — without them, models ignore the minority positive class (only 16% of data)."
     ]
     for insight in insights:
         st.markdown(f'<div class="insight-card">{insight}</div>', unsafe_allow_html=True)

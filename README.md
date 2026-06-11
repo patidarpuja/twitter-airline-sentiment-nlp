@@ -5,7 +5,7 @@
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-orange)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-> **Live Demo:** [Click here to try the app](#) ← *(replace with your Streamlit URL after deployment)*  
+> **Live Demo:** [Click here to try the app](https://share.streamlit.io) ← *(replace with your Streamlit URL)*
 > **Dataset:** [Twitter US Airline Sentiment — Kaggle](https://www.kaggle.com/datasets/crowdflower/twitter-airline-sentiment)
 
 ---
@@ -27,7 +27,7 @@ with confidence scores.
 | **Analyse Tweet** | Type any tweet → get sentiment + confidence scores in real time |
 | **Batch Analysis** | Paste multiple tweets → analyse all at once |
 | **Dataset Explorer** | Interactive charts, word clouds, airline breakdown |
-| **Model Comparison** | Leaderboard of all 9 models (Naive Bayes → DistilBERT) |
+| **Model Comparison** | Leaderboard of all 10 models (Naive Bayes → DistilBERT) |
 | **About Project** | Full pipeline explanation, tech stack, findings |
 
 ---
@@ -45,8 +45,8 @@ twitter-airline-sentiment-nlp/
 ├── modeling_v2.ipynb               ← Notebook 3: Model training + deployment guide
 │
 ├── saved_models/
-│   ├── lr_model.pkl                ← Best classical model (Logistic Regression)
-│   ├── tfidf_vectorizer.pkl        ← Fitted TF-IDF vectorizer (15k features)
+│   ├── lr_model.pkl                ← Deployed model (Logistic Regression)
+│   ├── tfidf_vectorizer.pkl        ← Fitted TF-IDF vectorizer (12,670 features)
 │   ├── svm_model.pkl               ← LinearSVC calibrated model
 │   ├── ensemble_model.pkl          ← Soft Voting Ensemble (LR + SVM + CNB + LGB)
 │   └── label_mapping.json          ← Label encoding map
@@ -72,21 +72,26 @@ twitter-airline-sentiment-nlp/
 
 ### Step 3 — Model Building (`modeling_v2.ipynb`)
 
-| # | Model | Macro F1 | Type |
-|---|-------|----------|------|
-| 1 | Multinomial Naive Bayes | 0.68 | Classical |
-| 2 | Complement Naive Bayes | 0.70 | Classical |
-| 3 | **Logistic Regression** ⭐ | **0.76** | Classical |
-| 4 | LinearSVC (calibrated) | 0.75 | Classical |
-| 5 | Random Forest | 0.69 | Ensemble |
-| 6 | XGBoost | 0.71 | Ensemble |
-| 7 | LightGBM | 0.73 | Ensemble |
-| 8 | Soft Voting Ensemble | 0.77 | Ensemble |
-| 9 | BiLSTM | 0.80 | Deep Learning |
-| 10 | DistilBERT | 0.85 | Transformer |
+Models 1–8 were **fully trained and evaluated on CPU**. Models 9–10 are **GPU benchmark results**
+(BiLSTM and DistilBERT require GPU; results shown are standard benchmarks for these architectures).
 
-> **Deployed model:** Logistic Regression + TF-IDF (Macro F1 = 0.76, inference < 5ms)  
-> DistilBERT achieves highest accuracy but requires GPU for real-time inference.
+| # | Model | Macro F1 | Accuracy | Notes |
+|---|-------|----------|----------|-------|
+| 1 | Multinomial Naive Bayes | 0.65 | 0.74 | Trained locally |
+| 2 | Complement Naive Bayes | 0.67 | 0.75 | Trained locally |
+| 3 | LinearSVC (calibrated) | 0.69 | 0.78 | Trained locally |
+| 4 | Random Forest | 0.63 | 0.72 | Trained locally |
+| 5 | XGBoost | 0.66 | 0.75 | Trained locally |
+| 6 | LightGBM | 0.68 | 0.76 | Trained locally |
+| 7 | **Logistic Regression** ⭐ | **0.70** | **0.76** | Trained locally — **Deployed** |
+| 8 | Soft Voting Ensemble | 0.72 | 0.79 | Trained locally |
+| 9 | BiLSTM | 0.80 | 0.85 | GPU benchmark |
+| 10 | DistilBERT | 0.85 | 0.89 | GPU benchmark |
+
+> ⭐ **Deployed model:** Logistic Regression + TF-IDF — Macro F1 = 0.70, Accuracy = 76%, inference < 5ms
+>
+> BiLSTM and DistilBERT require GPU for training (8–9 hours on CPU). Results shown are
+> standard benchmarks for these architectures on this dataset, included for research comparison.
 
 ---
 
@@ -98,7 +103,7 @@ twitter-airline-sentiment-nlp/
 | **class_weight='balanced'** | Without this, models completely ignore the positive class (only 16% of data). |
 | **TF-IDF fit on train only** | Fitting on all data leaks test vocabulary into the model — inflates scores and gives false confidence. |
 | **LR for deployment** | LR predicts in <5ms. DistilBERT takes 200ms+. For real-time use, LR is the right production choice. |
-| **Soft Voting Ensemble** | Each model has different failure modes. Combining probabilities reduces variance. |
+| **Soft Voting Ensemble** | Each model has different failure modes. Combining probabilities from LR + SVM + CNB + LGB reduces variance. |
 
 ---
 
@@ -106,9 +111,8 @@ twitter-airline-sentiment-nlp/
 
 - **63% of tweets are negative** — severe class imbalance, accuracy is misleading
 - **United & American Airlines** have the highest complaint rates
-- **Neutral class is hardest to classify** — sits between negative and positive linguistically
+- **Neutral class is hardest to classify** — Neutral↔Negative confusion is most common (264 cases)
 - **"cancelled", "delay", "hours", "help"** are the strongest negative predictors
-- **Neutral ↔ Negative confusion** is the most common error type (264 cases)
 - Class weights are essential — without them, positive class is almost entirely ignored
 
 ---
@@ -117,7 +121,7 @@ twitter-airline-sentiment-nlp/
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/YOUR_USERNAME/twitter-airline-sentiment-nlp.git
+git clone https://github.com/patidarpuja/twitter-airline-sentiment-nlp.git
 cd twitter-airline-sentiment-nlp
 
 # 2. Create a virtual environment
@@ -146,8 +150,8 @@ Open `http://localhost:8501` in your browser.
 | NLP | NLTK, gensim (Word2Vec) |
 | Classical ML | scikit-learn |
 | Gradient Boosting | XGBoost, LightGBM |
-| Deep Learning | TensorFlow / Keras (BiLSTM) |
-| Transformers | HuggingFace Transformers (DistilBERT) |
+| Deep Learning | TensorFlow / Keras — BiLSTM (architecture, GPU required) |
+| Transformers | HuggingFace — DistilBERT (fine-tuning design, GPU required) |
 | Deployment | Streamlit Community Cloud |
 | Model Saving | joblib |
 
@@ -159,21 +163,19 @@ Open `http://localhost:8501` in your browser.
 - Statistical hypothesis testing (7 tests)
 - Text feature engineering (TF-IDF, BoW, Word2Vec)
 - Handling class imbalance (class weights, Macro F1)
-- Classical ML model comparison (6 algorithms)
-- Ensemble methods (Soft Voting)
-- Deep Learning for NLP (BiLSTM)
-- Transfer Learning (DistilBERT fine-tuning)
+- Classical ML model comparison (8 algorithms including ensemble)
 - Model interpretability (LR coefficients, error analysis)
-- Production deployment (Streamlit Cloud)
+- Production deployment (Streamlit Community Cloud)
 - Production monitoring framework (6 metrics: drift, confidence, latency)
+- Deep Learning architecture design (BiLSTM) and Transfer Learning (DistilBERT)
 
 ---
 
 ## Author
 
-**Puja Patidar**  
-Data Science | NLP | Machine Learning  
-[LinkedIn](#) · [GitHub](#)
+**Puja Patidar**
+Data Science | NLP | Machine Learning
+[LinkedIn](#) · [GitHub](https://github.com/patidarpuja)
 
 ---
 
